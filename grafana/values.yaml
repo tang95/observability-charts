@@ -1,0 +1,6 @@
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+  nodeSelector:
+    name: worker01

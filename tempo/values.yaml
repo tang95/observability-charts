@@ -1,0 +1,11 @@
+traces:
+  jaeger:
+    grpc:
+      enabled: true
+  otlp:
+    http:
+      enabled: true
+    grpc:
+      enabled: true
+gateway:
+  enabled: true
