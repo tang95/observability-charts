@@ -9,9 +9,12 @@ dependencies:
   - name: kube-prometheus-stack
     version: 62.7.0
     repository: https://prometheus-community.github.io/helm-charts
-  - name: loki-distributed
-    version: 0.79.3
-    repository: https://grafana.github.io/helm-charts
   - name: opentelemetry-collector
     version: 0.105.1
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+  - name: loki
+    version: 6.12.0
+    repository: https://grafana.github.io/helm-charts
+  - name: tempo
+    version: 1.10.3
+    repository: https://grafana.github.io/helm-charts
