@@ -1,5 +1,5 @@
 ---
-# Source: opentelemetry-demo/templates/grafana-dashboards.yaml
+# Source: opentelemetry-demo/files/grafana-dashboards.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:

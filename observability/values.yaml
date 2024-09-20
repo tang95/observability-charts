@@ -135,7 +135,10 @@ opentelemetry-collector:
         endpoint: ${env:MY_POD_IP}:13133
 
     exporters:
-      debug: { }
+      debug:
+        verbosity: detailed
+        sampling_initial: 5
+        sampling_thereafter: 5
       otlphttp/loki:
         endpoint: http://observability-loki-gateway.monitoring/otlp
       otlp/tempo:
@@ -154,12 +157,12 @@ opentelemetry-collector:
         logs:
           receivers: [ otlp ]
           processors: [ memory_limiter, resource, batch ]
-          exporters: [ otlphttp/loki, debug ]
+          exporters: [ otlphttp/loki ]
         traces:
           receivers: [ otlp ]
           processors: [ memory_limiter, resource, transform, batch ]
-          exporters: [ otlp/tempo, spanmetrics, debug ]
+          exporters: [ otlp/tempo, spanmetrics ]
         metrics:
           receivers: [ otlp, spanmetrics ]
           processors: [ memory_limiter, resource, batch ]
-          exporters: [ prometheusremotewrite, debug ]
+          exporters: [ prometheusremotewrite ]
