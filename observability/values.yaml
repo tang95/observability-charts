@@ -1,18 +1,45 @@
 kube-prometheus-stack:
-  grafana:
-    persistence:
-      enabled: true
   prometheus:
     prometheusSpec:
+      enableRemoteWriteReceiver: true
       storageSpec:
         volumeClaimTemplate:
           spec:
             resources:
               requests:
-                storage: 50Gi
-
+                storage: 10Gi
+  grafana:
+    adminPassword: admin
+    persistence:
+      enabled: true
+    additionalDataSources:
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://observability-loki-gateway.monitoring
+        jsonData:
+          timeout: 60
+          maxLines: 1000
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        url: http://observability-tempo.monitoring:3100
+        access: proxy
+        basicAuth: false
+        jsonData:
+          serviceMap:
+            datasourceUid: 'prometheus'
+          tracesToLogsV2:
+            datasourceUid: 'loki'
+          tracesToMetrics:
+            datasourceUid: 'prometheus'
 
 tempo:
+  tempo:
+    metricsGenerator:
+      enabled: true
+      remoteWriteUrl: http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write
   persistence:
     enabled: true
 
@@ -43,6 +70,8 @@ loki:
     replicas: 0
   write:
     replicas: 0
+  lokiCanary:
+    labelname: k8s_pod_name
 
 opentelemetry-collector:
   mode: daemonset
@@ -68,19 +97,42 @@ opentelemetry-collector:
           grpc:
             endpoint: 0.0.0.0:4317
           http:
+            cors:
+              allowed_origins:
+                - http://*
+                - https://*
             endpoint: 0.0.0.0:4318
 
+    connectors:
+      spanmetrics: {}
     processors:
-      batch:
+      batch: { }
+      resource:
+        attributes:
+          - action: insert
+            from_attribute: k8s.pod.uid
+            key: service.instance.id
+      transform:
+        error_mode: ignore
+        trace_statements:
+          - context: span
+            statements:
+              - replace_pattern(name, "\\?.*", "")
+              - replace_match(name, "GET /api/products/*", "GET /api/products/{productId}")
       memory_limiter:
         check_interval: 5s
-        spike_limit_mib: 25
         limit_percentage: 80
+        spike_limit_percentage: 25
+      k8sattributes:
+        extract:
+          labels:
+            - tag_name: service.name
+              key: app.kubernetes.io/component
+              from: pod
 
     extensions:
       health_check:
         endpoint: ${env:MY_POD_IP}:13133
-      pprof:
 
     exporters:
       debug: { }
@@ -88,21 +140,26 @@ opentelemetry-collector:
         endpoint: http://observability-loki-gateway.monitoring/otlp
       otlp/tempo:
         endpoint: observability-tempo.monitoring:4317
+        tls:
+          insecure: true
       prometheusremotewrite:
         endpoint: http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write
 
     service:
-      extensions: [ health_check, pprof ]
+      extensions: [ health_check ]
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
       pipelines:
         logs:
           receivers: [ otlp ]
-          processors: [ memory_limiter, batch ]
+          processors: [ memory_limiter, resource, batch ]
           exporters: [ otlphttp/loki, debug ]
         traces:
           receivers: [ otlp ]
-          processors: [ memory_limiter, batch ]
-          exporters: [ otlp/tempo, debug ]
+          processors: [ memory_limiter, resource, transform, batch ]
+          exporters: [ otlp/tempo, spanmetrics, debug ]
         metrics:
-          receivers: [ otlp ]
-          processors: [ memory_limiter, batch ]
+          receivers: [ otlp, spanmetrics ]
+          processors: [ memory_limiter, resource, batch ]
           exporters: [ prometheusremotewrite, debug ]

@@ -3,16 +3,29 @@
 ### prerequisites
 
 install `helm` and `kubectl`
-install `istio`
-
-### microservices-demo
 
 ```shell
-kubectl apply -k microservices-demo/
-```
-
-### observability
+# install
+kubectl apply -f microservice.yaml
+helm upgrade observability observability -n monitoring --create-namespace --install
+````
 
 ```shell
-helm install observability observability -n monitoring --create-namespace
+# uninstall
+helm uninstall observability -n monitoring
 ```
+
+### usage
+```shell
+kubectl port-forward svc/frontendproxy 8080
+```
+### loadgenerator
+```shell
+kubectl port-forward svc/loadgenerator 8089
+```
+
+### grafana
+```shell
+kubectl port-forward svc/observability-grafana -n monitoring 3000:80
+```
+
