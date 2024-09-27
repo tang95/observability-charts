@@ -7,4 +7,6 @@ spec:
     - name: otel-tracing
       opentelemetry:
         port: 4317
-        service: observability-opentelemetry-collector.monitoring.svc.cluster.local
+        service: observability-alloy.monitoring.svc.cluster.local
+        resource_detectors:
+          environment: {}

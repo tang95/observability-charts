@@ -17,15 +17,15 @@ kind: Deployment
 metadata:
   name: shippingservice
   labels:
-    app.kubernetes.io/component: shippingservice
+    app.kubernetes.io/name: shippingservice
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/component: shippingservice
+      app.kubernetes.io/name: shippingservice
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: shippingservice
+        app.kubernetes.io/name: shippingservice
     spec:
       serviceAccountName: shippingservice
       securityContext:
@@ -70,11 +70,11 @@ kind: Service
 metadata:
   name: shippingservice
   labels:
-    app.kubernetes.io/component: shippingservice
+    app.kubernetes.io/name: shippingservice
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/component: shippingservice
+    app.kubernetes.io/name: shippingservice
   ports:
   - name: grpc
     port: 50051

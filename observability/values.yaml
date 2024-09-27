@@ -1,6 +1,57 @@
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+  plugins:
+    - grafana-lokiexplore-app
+    - grafana-exploretraces-app
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Mimir
+          type: prometheus
+          uid: mimir
+          url: http://observability-mimir-nginx.monitoring/prometheus
+        - name: Prometheus
+          type: prometheus
+          uid: prometheus
+          url: http://observability-kube-prometh-prometheus.monitoring:9090
+          jsonData:
+            manageAlerts: true
+        - name: Loki
+          type: loki
+          uid: loki
+          url: http://observability-loki-gateway.monitoring
+        - name: Tempo
+          type: tempo
+          uid: tempo
+          url: http://observability-tempo.monitoring:3100
+          jsonData:
+            lokiSearch:
+              datasourceUid: 'loki'
+            serviceMap:
+              datasourceUid: 'mimir'
+            tracesToLogsV2:
+              datasourceUid: 'loki'
+            tracesToMetrics:
+              datasourceUid: 'mimir'
+  sidecar:
+    dashboards:
+      enabled: true
+  serviceMonitor:
+    enabled: true
+
 kube-prometheus-stack:
+  enabled: true
   prometheus:
     prometheusSpec:
+      retention: 24h
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+      scrapeConfigSelectorNilUsesHelmValues: false
+      ruleSelectorNilUsesHelmValues: false
+      probeSelectorNilUsesHelmValues: false
       enableRemoteWriteReceiver: true
       storageSpec:
         volumeClaimTemplate:
@@ -8,47 +59,26 @@ kube-prometheus-stack:
             resources:
               requests:
                 storage: 10Gi
+      additionalRemoteWrite:
+        - url: http://observability-mimir-nginx.monitoring/api/v1/push
   grafana:
-    adminPassword: admin
-    persistence:
-      enabled: true
-    additionalDataSources:
-      - name: Loki
-        type: loki
-        uid: loki
-        access: proxy
-        url: http://observability-loki-gateway.monitoring
-        jsonData:
-          timeout: 60
-          maxLines: 1000
-      - name: Tempo
-        type: tempo
-        uid: tempo
-        url: http://observability-tempo.monitoring:3100
-        access: proxy
-        basicAuth: false
-        jsonData:
-          serviceMap:
-            datasourceUid: 'prometheus'
-          tracesToLogsV2:
-            datasourceUid: 'loki'
-          tracesToMetrics:
-            datasourceUid: 'prometheus'
+    enabled: false
+    forceDeployDashboards: true
 
 tempo:
+  enabled: true
   tempo:
     metricsGenerator:
       enabled: true
-      remoteWriteUrl: http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write
+      remoteWriteUrl: http://observability-mimir-nginx.monitoring/api/v1/push
   persistence:
     enabled: true
 
 loki:
+  enabled: true
   deploymentMode: SingleBinary
   loki:
     auth_enabled: false
-    limits_config:
-      allow_structured_metadata: true
     commonConfig:
       replication_factor: 1
     storage:
@@ -70,99 +100,201 @@ loki:
     replicas: 0
   write:
     replicas: 0
-  lokiCanary:
-    labelname: k8s_pod_name
 
-opentelemetry-collector:
-  mode: daemonset
-  image:
-    repository: otel/opentelemetry-collector-contrib
-  presets:
-    logsCollection:
-      enabled: true
-      includeCollectorLogs: true
-    kubernetesAttributes:
-      enabled: true
-      extractAllPodLabels: true
-      extractAllPodAnnotations: true
-    kubernetesEvents:
-      enabled: true
-  service:
-    enabled: true
+mimir-distributed:
+  alertmanager:
+    enabled: false
+  enabled: true
+  minio:
+    image:
+      tag: RELEASE.2024-04-18T19-09-19Z-cpuv1
+    mcImage:
+      tag: RELEASE.2024-04-18T16-45-29Z-cpuv1
 
-  alternateConfig:
-    receivers:
-      otlp:
-        protocols:
-          grpc:
-            endpoint: 0.0.0.0:4317
-          http:
-            cors:
-              allowed_origins:
-                - http://*
-                - https://*
-            endpoint: 0.0.0.0:4318
+alloy:
+  enabled: true
+  alloy:
+    stabilityLevel: experimental
+    extraPorts:
+      - name: "otlp"
+        port: 4317
+        targetPort: 4317
+        protocol: "TCP"
+      - name: "otlp-http"
+        port: 4318
+        targetPort: 4318
+        protocol: "TCP"
+    configMap:
+      content: |-
+        logging {
+          level = "info"
+          format = "logfmt"
+        }
+        // discovery.kubernetes allows you to find scrape targets from Kubernetes resources.
+        // It watches cluster state and ensures targets are continually synced with what is currently running in your cluster.
+        discovery.kubernetes "pod" {
+          role = "pod"
+        }
+        
+        // discovery.relabel rewrites the label set of the input targets by applying one or more relabeling rules.
+        // If no rules are defined, then the input targets are exported as-is.
+        discovery.relabel "pod_logs" {
+          targets = discovery.kubernetes.pod.targets
+        
+          // Label creation - "namespace" field from "__meta_kubernetes_namespace"
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            action = "replace"
+            target_label = "namespace"
+          }
+        
+          // Label creation - "pod" field from "__meta_kubernetes_pod_name"
+          rule {
+            source_labels = ["__meta_kubernetes_pod_name"]
+            action = "replace"
+            target_label = "pod"
+          }
+        
+          // Label creation - "container" field from "__meta_kubernetes_pod_container_name"
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            action = "replace"
+            target_label = "container"
+          }
 
-    connectors:
-      spanmetrics: {}
-    processors:
-      batch: { }
-      resource:
-        attributes:
-          - action: insert
-            from_attribute: k8s.pod.uid
-            key: service.instance.id
-      transform:
-        error_mode: ignore
-        trace_statements:
-          - context: span
-            statements:
-              - replace_pattern(name, "\\?.*", "")
-              - replace_match(name, "GET /api/products/*", "GET /api/products/{productId}")
-      memory_limiter:
-        check_interval: 5s
-        limit_percentage: 80
-        spike_limit_percentage: 25
-      k8sattributes:
-        extract:
-          labels:
-            - tag_name: service.name
-              key: app.kubernetes.io/component
-              from: pod
+          // Label creation -  "app" field from "__meta_kubernetes_pod_label_app_kubernetes_io_name"
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+            action = "replace"
+            target_label = "app"
+          }
+        
+          // Label creation -  "job" field from "__meta_kubernetes_namespace" and "__meta_kubernetes_pod_container_name"
+          // Concatenate values __meta_kubernetes_namespace/__meta_kubernetes_pod_container_name
+          rule {
+            source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+            action = "replace"
+            target_label = "job"
+            separator = "/"
+            replacement = "$1"
+          }
+        
+          // Label creation - "container" field from "__meta_kubernetes_pod_uid" and "__meta_kubernetes_pod_container_name"
+          // Concatenate values __meta_kubernetes_pod_uid/__meta_kubernetes_pod_container_name.log
+          rule {
+            source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+            action = "replace"
+            target_label = "__path__"
+            separator = "/"
+            replacement = "/var/log/pods/*$1/*.log"
+          }
+        
+          // Label creation -  "container_runtime" field from "__meta_kubernetes_pod_container_id"
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_id"]
+            action = "replace"
+            target_label = "container_runtime"
+            regex = "^(\\S+):\\/\\/.+$"
+            replacement = "$1"
+          }
+        }
+        
+        // loki.source.kubernetes tails logs from Kubernetes containers using the Kubernetes API.
+        loki.source.kubernetes "pod_logs" {
+          targets    = discovery.relabel.pod_logs.output
+          forward_to = [loki.process.pod_logs.receiver]
+        }
+        
+        // loki.process receives log entries from other Loki components, applies one or more processing stages,
+        // and forwards the results to the list of receivers in the component’s arguments.
+        loki.process "pod_logs" {
+          stage.static_labels {
+              values = {
+                cluster = "demo",
+              }
+          }
+          forward_to = [loki.write.default.receiver]
+        }
+        // loki.source.kubernetes_events tails events from the Kubernetes API and converts them
+        // into log lines to forward to other Loki components.
+        loki.source.kubernetes_events "cluster_events" {
+          job_name   = "integrations/kubernetes/eventhandler"
+          log_format = "logfmt"
+          forward_to = [
+            loki.process.cluster_events.receiver,
+          ]
+        }
+        
+        // loki.process receives log entries from other loki components, applies one or more processing stages,
+        // and forwards the results to the list of receivers in the component’s arguments.
+        loki.process "cluster_events" {
+          forward_to = [loki.write.default.receiver]
+        
+          stage.static_labels {
+            values = {
+              cluster = "demo",
+            }
+          }
+        
+          stage.labels {
+            values = {
+              kubernetes_cluster_events = "job",
+            }
+          }
+        }
+        
+        otelcol.receiver.otlp "default" {
+          grpc {
+            endpoint = "127.0.0.1:4317"
+          }
 
-    extensions:
-      health_check:
-        endpoint: ${env:MY_POD_IP}:13133
+          http {
+            endpoint = "127.0.0.1:4318"
+          }
 
-    exporters:
-      debug:
-        verbosity: detailed
-        sampling_initial: 5
-        sampling_thereafter: 5
-      otlphttp/loki:
-        endpoint: http://observability-loki-gateway.monitoring/otlp
-      otlp/tempo:
-        endpoint: observability-tempo.monitoring:4317
-        tls:
-          insecure: true
-      prometheusremotewrite:
-        endpoint: http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write
+          output {
+            metrics = [otelcol.processor.batch.default.input]
+            logs    = [otelcol.processor.batch.default.input]
+            traces  = [otelcol.processor.batch.default.input]
+          }
+        }
 
-    service:
-      extensions: [ health_check ]
-      telemetry:
-        metrics:
-          address: 0.0.0.0:8888
-      pipelines:
-        logs:
-          receivers: [ otlp ]
-          processors: [ memory_limiter, resource, batch ]
-          exporters: [ otlphttp/loki ]
-        traces:
-          receivers: [ otlp ]
-          processors: [ memory_limiter, resource, transform, batch ]
-          exporters: [ otlp/tempo, spanmetrics ]
-        metrics:
-          receivers: [ otlp, spanmetrics ]
-          processors: [ memory_limiter, resource, batch ]
-          exporters: [ prometheusremotewrite ]
+        otelcol.processor.batch "default" {
+          output {
+            metrics = [otelcol.exporter.prometheus.default.input]
+            logs    = [otelcol.exporter.loki.default.input]
+            traces  = [otelcol.exporter.otlp.tempo.input]
+          }
+        }
+        
+        otelcol.exporter.prometheus "default" {
+          forward_to = [prometheus.remote_write.default.receiver]
+        }
+        
+        otelcol.exporter.loki "default" {
+          forward_to = [loki.write.default.receiver]
+        }
+        
+        otelcol.exporter.debug "default" {}
+
+        otelcol.exporter.otlp "tempo" {
+          client {
+            endpoint = "observability-tempo.monitoring.svc.cluster.local:4317"
+            tls {
+              insecure             = true
+              insecure_skip_verify = true
+            }
+          }
+        }
+        
+        prometheus.remote_write "default" {
+          endpoint {
+            url = "http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write"
+          }
+        }
+        
+        loki.write "default" {
+          endpoint {
+            url = "http://observability-loki-gateway.monitoring/loki/api/v1/push"
+          }
+        }

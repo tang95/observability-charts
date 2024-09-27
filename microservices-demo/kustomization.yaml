@@ -12,5 +12,3 @@ resources:
   - productcatalogservice.yaml
   - recommendationservice.yaml
   - shippingservice.yaml
-components:
-  - microservices-demo-istio

@@ -8,19 +8,19 @@ install `helm`、`istio` and `kubectl`
 
 ```shell
 istioctl install -y -f istio-config/mesh-config.yaml
-kubectl apply -f istio-config/otel-tracing.yaml
 kubectl label namespace default istio-injection=enabled
 kubectl apply -k microservices-demo
+kubectl apply -k istio-config
 helm upgrade observability observability -n monitoring --create-namespace --install
 ````
 
 ### uninstall
 
 ```shell
+kubectl delete -k istio-config
+kubectl delete -k microservices-demo
 helm uninstall observability -n monitoring
 kubectl delete namespace monitoring
-kubectl delete -k microservices-demo
-kubectl delete -f istio-config/otel-tracing.yaml
 istioctl uninstall -y --purge
 kubectl delete namespace istio-system
 kubectl label namespace default istio-injection-
@@ -36,6 +36,7 @@ sudo kubectl port-forward svc/istio-ingressgateway -n istio-system 80
 ### grafana
 
 ```shell
+kubectl get secret --namespace monitoring observability-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 kubectl port-forward svc/observability-grafana -n monitoring 3000:80
 # open http://127.0.0.1:3000
 ```
