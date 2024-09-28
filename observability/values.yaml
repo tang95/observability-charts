@@ -67,10 +67,6 @@ kube-prometheus-stack:
 
 tempo:
   enabled: true
-  tempo:
-    metricsGenerator:
-      enabled: true
-      remoteWriteUrl: http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write
   persistence:
     enabled: true
 
@@ -114,13 +110,12 @@ mimir-distributed:
 alloy:
   enabled: true
   alloy:
-    stabilityLevel: experimental
     extraPorts:
-      - name: "otlp"
+      - name: "grpc-otlp"
         port: 4317
         targetPort: 4317
         protocol: "TCP"
-      - name: "otlp-http"
+      - name: "http-otlp"
         port: 4318
         targetPort: 4318
         protocol: "TCP"
@@ -292,19 +287,3 @@ alloy:
             url = "http://observability-loki-gateway.monitoring/loki/api/v1/push"
           }
         }
-
-
-jaeger:
-  enabled: true
-  provisionDataStore:
-    cassandra: false
-  allInOne:
-    enabled: true
-  storage:
-    type: memory
-  agent:
-    enabled: false
-  collector:
-    enabled: false
-  query:
-    enabled: false
