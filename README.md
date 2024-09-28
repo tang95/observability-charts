@@ -1,5 +1,3 @@
-# rca-env
-
 ### prerequisites
 
 install `helm`、`istio` and `kubectl`

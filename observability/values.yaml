@@ -70,7 +70,7 @@ tempo:
   tempo:
     metricsGenerator:
       enabled: true
-      remoteWriteUrl: http://observability-mimir-nginx.monitoring/api/v1/push
+      remoteWriteUrl: http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write
   persistence:
     enabled: true
 
@@ -245,21 +245,17 @@ alloy:
         
         otelcol.receiver.otlp "default" {
           grpc {
-            endpoint = "127.0.0.1:4317"
+            endpoint = "0.0.0.0:4317"
           }
 
           http {
-            endpoint = "127.0.0.1:4318"
+            endpoint = "0.0.0.0:4318"
+            cors {
+              allowed_origins = ["http://*", "https://*"]
+              allowed_headers = ["*"]
+            }
           }
 
-          output {
-            metrics = [otelcol.processor.batch.default.input]
-            logs    = [otelcol.processor.batch.default.input]
-            traces  = [otelcol.processor.batch.default.input]
-          }
-        }
-
-        otelcol.processor.batch "default" {
           output {
             metrics = [otelcol.exporter.prometheus.default.input]
             logs    = [otelcol.exporter.loki.default.input]
@@ -274,8 +270,6 @@ alloy:
         otelcol.exporter.loki "default" {
           forward_to = [loki.write.default.receiver]
         }
-        
-        otelcol.exporter.debug "default" {}
 
         otelcol.exporter.otlp "tempo" {
           client {
@@ -298,3 +292,19 @@ alloy:
             url = "http://observability-loki-gateway.monitoring/loki/api/v1/push"
           }
         }
+
+
+jaeger:
+  enabled: true
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+  storage:
+    type: memory
+  agent:
+    enabled: false
+  collector:
+    enabled: false
+  query:
+    enabled: false
