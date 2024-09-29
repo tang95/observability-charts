@@ -2,11 +2,19 @@ apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 spec:
   meshConfig:
+    defaultConfig:
+      tracingServiceName: CANONICAL_NAME_ONLY
+      tracing:
+        sampling: 100.0
     enableTracing: true
+    accessLogFile: /dev/stdout
+    defaultProviders:
+      tracing:
+        - otel
+      metrics:
+        - otel
     extensionProviders:
-    - name: otel-tracing
+    - name: otel
       opentelemetry:
         port: 4317
         service: observability-alloy.monitoring.svc.cluster.local
-        resource_detectors:
-          environment: {}

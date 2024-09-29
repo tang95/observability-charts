@@ -8,7 +8,6 @@ install `helm`、`istio` and `kubectl`
 istioctl install -y -f istio-config/mesh-config.yaml
 kubectl label namespace default istio-injection=enabled
 kubectl apply -k microservices-demo
-kubectl apply -k istio-config
 helm upgrade observability observability -n monitoring --create-namespace --install
 ````
 
