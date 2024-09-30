@@ -5,16 +5,15 @@ install `helm`、`istio` and `kubectl`
 #### install
 
 ```shell
+helm upgrade observability observability -n monitoring --create-namespace --install
 istioctl install -y -f istio-config/mesh-config.yaml
 kubectl label namespace default istio-injection=enabled
 kubectl apply -k microservices-demo
-helm upgrade observability observability -n monitoring --create-namespace --install
 ````
 
 ### uninstall
 
 ```shell
-kubectl delete -k istio-config
 kubectl delete -k microservices-demo
 helm uninstall observability -n monitoring
 kubectl delete namespace monitoring
