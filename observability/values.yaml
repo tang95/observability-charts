@@ -9,10 +9,6 @@ grafana:
     datasources.yaml:
       apiVersion: 1
       datasources:
-        - name: Mimir
-          type: prometheus
-          uid: mimir
-          url: http://observability-mimir-nginx.monitoring/prometheus
         - name: Prometheus
           type: prometheus
           uid: prometheus
@@ -31,11 +27,11 @@ grafana:
             lokiSearch:
               datasourceUid: 'loki'
             serviceMap:
-              datasourceUid: 'mimir'
+              datasourceUid: 'prometheus'
             tracesToLogsV2:
               datasourceUid: 'loki'
             tracesToMetrics:
-              datasourceUid: 'mimir'
+              datasourceUid: 'prometheus'
   sidecar:
     dashboards:
       searchNamespace: ALL
@@ -60,8 +56,6 @@ kube-prometheus-stack:
             resources:
               requests:
                 storage: 10Gi
-      additionalRemoteWrite:
-        - url: http://observability-mimir-nginx.monitoring/api/v1/push
   grafana:
     enabled: false
     forceDeployDashboards: true
@@ -71,7 +65,7 @@ tempo:
   tempo:
     metricsGenerator:
       enabled: true
-      remoteWriteUrl: http://observability-mimir-nginx.monitoring/api/v1/push
+      remoteWriteUrl: http://observability-kube-prometh-prometheus.monitoring:9090/api/v1/write
   config: |
     multitenancy_enabled: {{ .Values.tempo.multitenancyEnabled }}
     usage_report:
@@ -136,16 +130,6 @@ loki:
     replicas: 0
   write:
     replicas: 0
-
-mimir-distributed:
-  alertmanager:
-    enabled: false
-  enabled: true
-  minio:
-    image:
-      tag: RELEASE.2024-04-18T19-09-19Z-cpuv1
-    mcImage:
-      tag: RELEASE.2024-04-18T16-45-29Z-cpuv1
 
 alloy:
   enabled: true
